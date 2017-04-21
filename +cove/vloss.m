@@ -1,4 +1,4 @@
-function [L,corrval,overlap] = vloss(XTest, R, M, V, delta,reg,hypers)
+function [L,corrval,overlap,Rp] = vloss(XTest, R, M, V, delta,reg,hypers)
 % normal loss function based on condition-specific variances
 %
 % XTest  testing dataset
@@ -6,8 +6,6 @@ function [L,corrval,overlap] = vloss(XTest, R, M, V, delta,reg,hypers)
 % Rp     correlation matrix of testing set based on training variances
 % V      nBins*nConds*1*nCells - variances per bin per cell
 % N      nBins*nConds*1*nCells - numbers of trials for each element of V in XTest
-
-
 
 p = size(XTest,4);
 assert(size(V,4)==p)
@@ -38,15 +36,16 @@ overlap = [];
 
 if nargin>5
     % correlation between test and train correlation matrices
-    corrval = corr(squareform(nodiag(Rp))',squareform(nodiag(R))');
-    
-    overlap = edgeoverlap(R,Rp,5);
-    
-%     sigma = diag(sqrt(mean(reshape(V,[],p))));  % average variances
-%     C = (sigma*Rp*sigma);
-%     C = cove.estimate_simple(C,reg, hypers); % get model-based covariance
-%     Rp_reg = sigma\C/sigma;
-        
+    try
+        corrval = corr(squareform(nodiag(Rp))',squareform(nodiag(R))');        
+        overlap = edgeoverlap(R,Rp,5);        
+        %     sigma = diag(sqrt(mean(reshape(V,[],p))));  % average variances
+        %     C = (sigma*Rp*sigma);
+        %     C = cove.estimate_simple(C,reg, hypers); % get model-based covariance
+        %     Rp_reg = sigma\C/sigma;
+    catch err
+        error('\nFailed!: %s\n',err.message);
+    end
 end
 
 if isnan(L)

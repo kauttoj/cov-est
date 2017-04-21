@@ -126,8 +126,8 @@ end
 
 if PRINT_STATS
     if ~strcmp(reg,'sample')
-        fprintf('corr2(R_sample,R_reg) = %f, condest(C_reg) = %f\n',corr2(squareform(nodiag(R_sample))',squareform(nodiag(R))'),extras.CondEst);
+        fprintf('corr2(R_sample,R_reg) = %f, condest(C_reg) = %f, type ''%s''\n\n',corr2(squareform(nodiag(R_sample))',squareform(nodiag(R))'),extras.CondEst,reg);
     else
-        fprintf('condest(C_sample) = %f\n',extras.CondEst);
+        fprintf('condest(C_sample) = %f, type ''%s''\n\n',extras.CondEst,reg);
     end
 end

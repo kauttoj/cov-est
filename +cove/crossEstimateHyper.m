@@ -16,14 +16,23 @@ visited = [];  % visited indices
 losses =  [];  % measured losses at visited indices
 correlations = [];
 edge_overlaps = [];
+Rps = [];
+
+K = 10;
 
 if nargin==3
-    K = 5;
-    [XTest,R,M,V] = arrayfun(@(k) estimate_([],k,K), 1:K, 'uni', false);
-    [losses_arr,corrvals,overlaps] = cellfun(@(XTest,R,M,V) cove.vloss(XTest,R,M,V,0,reg,[]), XTest, R, M, V);
+    [XTest,R,M,V] = arrayfun(@(k) estimate_([],k,K), 1:K,  'UniformOutput', false);
+    [losses_arr,corrvals,overlaps,Rp] = cellfun(@(XTest,R,M,V) cove.vloss(XTest,R,M,V,0,reg,[]), XTest, R, M, V, 'UniformOutput', false);
+    
+    losses_arr = cell2mat(losses_arr);
+    corrvals = cell2mat(corrvals);
+    overlaps = cell2mat(overlaps);
+    
     losses = mean(losses_arr);
     extras.correlation = corrvals;
     extras.edge_overlap = overlaps;
+    
+    extras.Rp = Rp;
     hypers = nan;
     bestDelta = nan;
     return;
@@ -69,6 +78,7 @@ hypers = cellfun(@(h,ix) h(ix), searchSpace, indices);
 
 extras.correlation = correlations{j};
 extras.edge_overlap = edge_overlaps{j};
+extras.Rp = Rps{j};
 
 fprintf('final hyperparameters: %s\n', sprintf(' %g', hypers))
 
@@ -76,14 +86,13 @@ fprintf('final hyperparameters: %s\n', sprintf(' %g', hypers))
         % visit a point on the search space specified by ix
         % but return if already visited
         
-        K = 5;        % K-fold cross-validation
         ix = num2cell(max(1,min(dims,ix)));
         hypers_ = cellfun(@(x,i) x(i), searchSpace, ix);
         ix = sub2ind([dims ones(1,2-length(dims))],ix{:});
         alreadyVisited = ismember(ix,visited);
         if ~alreadyVisited
             fprintf('%2.4g  ', hypers_)
-            [XTest,R,M,V] = arrayfun(@(k) estimate_(hypers_,k,K), 1:K, 'uni', false);
+            [XTest,R,M,V] = arrayfun(@(k) estimate_(hypers_,k,K), 1:K,  'UniformOutput', false);
             visited(end+1) = ix;
             if size(X,2)==1 % && size(X,1)==1
                 delta = 0;
@@ -92,11 +101,16 @@ fprintf('final hyperparameters: %s\n', sprintf(' %g', hypers))
                 deltas = cellfun(@(XTest,R,M,V) cove.findBestDelta(XTest, R, M, V), XTest, R, M, V);
                 delta = mean(deltas);
             end
-            [losses_arr,corrvals,overlaps] = cellfun(@(XTest,R,M,V) cove.vloss(XTest,R,M,V,delta,reg,hypers_), XTest, R, M, V);            
+            [losses_arr,corrvals,overlaps,Rp] = cellfun(@(XTest,R,M,V) cove.vloss(XTest,R,M,V,delta,reg,hypers_), XTest, R, M, V,'UniformOutput', false);            
+            
+            losses_arr = cell2mat(losses_arr);
+            corrvals = cell2mat(corrvals);
+            overlaps = cell2mat(overlaps);            
             
             losses(end+1) = mean(losses_arr);
             correlations{end+1} = corrvals;
             edge_overlaps{end+1} = overlaps;
+            Rps{end+1} = Rp;
             
             if losses(end)==min(losses)
                 bestDelta = delta;
