@@ -25,7 +25,7 @@ if nargin<3, cyc=200; end;
 [n,p] = size(X);   assert(n>=p)
 if n>p, X = cov(X);  end   % if not square, compute covariance
 
-[L,d] = eigs(X,K); L = L*sqrt(d);  % initialize with PCA
+[L,d] = eigs(double(X),K); L = L*sqrt(d);  % initialize with PCA
 Ph=diag(X);  I=eye(K);  LL=nan(1,cyc);
 
 for i = 1:cyc

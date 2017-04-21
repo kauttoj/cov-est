@@ -1,4 +1,4 @@
-function [R, M, V, extras] = estimate(X, evokedBins, reg, hypers)
+function [R, M, V, extras,C] = estimate(X, evokedBins, reg, hypers, PRINT_STATS)
 % estimate covariance matrix C
 %
 % Input:
@@ -14,31 +14,38 @@ function [R, M, V, extras] = estimate(X, evokedBins, reg, hypers)
 %    extras - structure with additional information about the estimate,
 %    i.e. sparse component, low-rank components, sparsity, etc.
 
+warning('off','MATLAB:nearlySingularMatrix');
+
+if nargin==0
+   X = randn(7, 3, 300,50);
+end
+
+if nargin<5
+   PRINT_STATS = 1; 
+end
+
+X = double(X);
+
 extras = struct;
 [nBins, nConds, nTrials, nCells] = size(X);
-evokedBins = min(size(X,3),evokedBins);
+evokedBins = nBins;
 
 % estimate mean response
 % bin-specific means
 M = nanmean(X(1:evokedBins,:,:,:),3);   % binwise mean of evoked response
-if evokedBins < size(X,1)
-    % common mean during spontaneous activity
-    M2 = reshape(nanmean(reshape(X(evokedBins+1:end,:,:,:),[],nCells)),1,1,1,nCells);  % common mean in intertrial periods
-    M2 = repmat(M2,size(X,1)-evokedBins,nConds);
-    M = cat(1,M,M2);
-end
 
 % subtract mean
 X = bsxfun(@minus, X, M);
 
+% compute variance over bins instead of separately for bins
+XX = permute(X,[1,3,2,4]);
+XX = reshape(XX,[nBins*nTrials,nConds,nCells]);
+V = nanvar(XX,1,1);
+V = permute(V,[1,2,4,3]);
+V = repmat(V,[nBins,1,1,1]);
+
 % estimate binwise variances
-V = nanvar(X(1:evokedBins,:,:,:),1,3);   % binwise mean of evoked response
-if evokedBins < size(X,1)
-    % common variance during spontaneous activity
-    V2 = reshape(nanvar(reshape(X(evokedBins+1:end,:,:,:),[],nCells),1),1,1,1,nCells);  % common mean in intertrial periods
-    V2 = repmat(V2,size(X,1)-evokedBins,nConds);
-    V = cat(1,V,V2);
-end
+%V = nanvar(X(1:evokedBins,:,:,:),1,3);   % binwise mean of evoked response
 
 % sample correlation matrix based on bin-wise variances
 Z = bsxfun(@rdivide, X, sqrt(V));
@@ -49,7 +56,9 @@ R = corrcov(R,true);  % just in case
 % average variances across all bins and produce the average
 % sample covariance matrix, C
 sigma = diag(sqrt(mean(reshape(V,[],nCells))));  % average variances
-C = sigma*R*sigma;
+C = (sigma*R*sigma);
+
+R_sample = R;
 
 switch reg
     case 'sample'
@@ -83,6 +92,10 @@ switch reg
         extras.S = extras.S/scale;
         C = inv(extras.S);
         
+    case 'L1'        
+        assert(length(hypers)==1)
+        C = L1precisionBCD(C/mean(diag(C)),hypers(1));
+        
     case 'lv-glasso'
         assert(length(hypers)==2)
         cove.set('max_latent',inf)   % allow any number of latent variables
@@ -90,21 +103,9 @@ switch reg
         extras = cove.lvglasso(C/scale,hypers(1),hypers(2),cove.set);
         extras.S = extras.S/scale;  % scale back
         extras.L = extras.L/scale;
-        [H,D] = svds(extras.L,sum(~~extras.eigL));
+        [H,D] = svds(double(extras.L),sum(~~extras.eigL));
         extras.H = H*sqrt(D);
-        C = inv(extras.S - extras.H*extras.H');
-        
-    case 'lv-glasso refit'
-        assert(length(hypers)==2)
-        cove.set('max_latent',hypers(2))   % allow any number of latent variables
-        scale = mean(diag(C));
-        extras = cove.lvglasso(C/scale,hypers(1),0.001,cove.set);
-        extras.S = extras.S/scale;  % scale back
-        extras.L = extras.L/scale;
-        [H,D] = svds(extras.L,sum(~~extras.eigL));
-        extras.H = H*sqrt(D);
-        C = inv(extras.S - extras.H*extras.H');
-        
+        C = inv(extras.S - extras.H*extras.H');        
 
     otherwise
         error 'unknown covariance estimator'
@@ -113,8 +114,20 @@ end
 % convert back to correlations
 R = sigma\C/sigma;
 
+C = (C+C')/2;
+
+extras.CondEst = condest(C);
+
 if ~strcmp(reg,'sample')
     % transfer the change in variance from R to V
     V = bsxfun(@times, V, reshape(diag(R), [1 1 1 nCells]));
-    R = corrcov(R);
+    R = corrcov(R);    
+end
+
+if PRINT_STATS
+    if ~strcmp(reg,'sample')
+        fprintf('corr2(R_sample,R_reg) = %f, condest(C_reg) = %f\n',corr2(squareform(nodiag(R_sample))',squareform(nodiag(R))'),extras.CondEst);
+    else
+        fprintf('condest(C_sample) = %f\n',extras.CondEst);
+    end
 end
