@@ -20,7 +20,7 @@ Rps = [];
 
 K = 10;
 
-if nargin==3
+if isempty(searchSpace) || strcmp(reg,'sample')
     [XTest,R,M,V] = arrayfun(@(k) estimate_([],k,K), 1:K,  'UniformOutput', false);
     [losses_arr,corrvals,overlaps,Rp] = cellfun(@(XTest,R,M,V) cove.vloss(XTest,R,M,V,0,reg,[]), XTest, R, M, V, 'UniformOutput', false);
     
@@ -33,7 +33,7 @@ if nargin==3
     extras.edge_overlap = overlaps;
     
     extras.Rp = Rp;
-    hypers = nan;
+    hypers = [];
     bestDelta = nan;
     return;
 end

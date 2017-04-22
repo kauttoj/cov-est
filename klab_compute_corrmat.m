@@ -140,6 +140,25 @@ for trial = 1:length(dataOut.trial)
    end
 end
 
+bad_cells = [];
+for c=1:size(DATA,1)
+    for stim=1:size(DATA,2)        
+        sig = squeeze(DATA(c,stim,:,:));        
+        if sum(sum(sig>1e-6)>0)<size(DATA,4)*0.15
+            bad_cells(end+1)=c;
+            break;
+        end        
+    end
+end
+bad_cells = unique(bad_cells);
+
+DATA(bad_cells,:,:,:)=[];
+CELLS(bad_cells)=[];
+
+if length(bad_cells)>0
+   fprintf('\n\n!!!!! dropping %i cells not responding enough !!!\n\n',length(bad_cells)); 
+end
+
 grid1 = exp(-6:.05:-0.5);
 grid2 = exp(-6:.05:-0.5);
     

@@ -41,6 +41,13 @@ end
 
 % initialization
 n = size(SigmaO,1);
+
+if max(abs(vectorize(SigmaO-SigmaO')))>1e-10
+    error('Sigma not symmetric!');
+else
+   SigmaO = (SigmaO+SigmaO')/2; 
+end
+    
 s.S = eye(n); s.L = zeros(n,n); s.Lambda = zeros(n);
 mu = opts.mu; eta = opts.eta; tau = opts.tau;
 ~opts.verbose || fprintf('ADMM: alpha=%1.3f  beta=%1.3f\n',alpha,beta); %#ok<VUNUS>
@@ -80,11 +87,15 @@ function s = update(s,SigmaO,alpha,beta,mu,tau,max_latent)
 % update s.R
 B = mu*SigmaO - mu*s.Lambda - s.S + s.L;
 try
-[U,D] = eig(B); 
+    [U,D] = eig(B); 
 catch
     % this is a hack that fixed a few cases of "eig did not not converge"
     [U,D] = eigs(B,size(B,1)-1);
 end
+
+U = real(U);
+D = real(D);
+
 d = diag(D);
 s.eigR = (-d + sqrt(d.^2+4*mu))/2;
 s.R = sym(U*diag(s.eigR)*U');
