@@ -1,166 +1,18 @@
 
-function [cormat,CELLS,label_str,testvals] = klab_compute_corrmat(dataOut,class_labels,THRESHOLD,BINNING,TYPE,CROSSVAL_ITERATIONS)
+function [cormat,testvals] = klab_compute_corrmat(DATA,CROSSVAL_ITERATIONS)
 
 % Berkson's paradox
 
 warning('on','all');
 
-if nargin<6
+if nargin<2
     CROSSVAL_ITERATIONS = 0;
 end
 
 rng(666);
 
-if nargin==0
-    
-    figure('position',[15         870        2322         628]);    
-    
-    [DATA,cormat_true,covmat_true] = make_random_network(100,5000,5); % nCells,nTrials,Bins
-    %subplot(1,4,1);imagesc(nodiag(-corrcov(inv(covmat_true))));axis image;colorbar;
-        
-        
-    [cormat3,M3, V3, extras3,covmat] = cove.estimate(DATA,size(DATA,1),'sample',[]); % alpha = 0.05; beta = 0.25
-    covmat = (covmat + covmat')/2;
-    cormat_partial3 = -corrcov(inv(covmat));
-    subplot(1,3,1);imagesc(nodiag(cormat_partial3));axis image;colorbar;
-    
-    [hypers, bestDelta, visited, losses] = cove.crossEstimateHyper(DATA,size(DATA,1),'lv-glasso',{exp(-6:.1:-0.5),exp(-6:.1:-0.5)});%{10.^(-linspace(0.2,5,15)),10.^(-linspace(0.05,5,25))});
-    [cormat1,M1, V1, extras1,covmat] = cove.estimate(DATA,size(DATA,1),'lv-glasso',hypers); % alpha = 0.05; beta = 0.25
-    covmat = (covmat + covmat')/2;
-    cormat_partial1 = -corrcov(inv(covmat));
-    subplot(1,3,2);imagesc(nodiag(cormat_partial1));axis image;colorbar;
-    
-    [hypers, bestDelta, visited, losses] = cove.crossEstimateHyper(DATA,size(DATA,1),'diag',{exp(-6:0.1:-0.5),exp(-6:0.1:-0.5)});%{10.^(-linspace(0.2,5,15)),10.^(-linspace(0.05,5,25))});
-    [cormat2,M2, V2, extras2,covmat] = cove.estimate(DATA,size(DATA,1),'diag',hypers); % alpha = 0.05; beta = 0.25
-    covmat = (covmat + covmat')/2;
-    cormat_partial2 = -corrcov(inv(covmat));
-    subplot(1,3,3);imagesc(nodiag(cormat_partial2));axis image;colorbar;
-
-    return;
-    
-end
-
-DT = 1/dataOut.AquisitionParams.framerate;
-
-N_bin_frames = round(BINNING/DT);
-
-N_labels = length(dataOut.blockLabels);
-
-frames = [];
-for trial = 1:length(dataOut.trial)
-   for repeat = 1:dataOut.trial(trial).stimuliRepeats       
-       for stim = 1:N_labels
-            frames(end+1) = sum((dataOut.trial(trial).stimulus_vector==stim).*(dataOut.trial(trial).repetition_vector==repeat));
-       end
-   end
-end
-N_blocks = median(frames);
-
-bin_indices = 1:N_bin_frames:N_blocks;
-bin_indices(end+1) = round(N_blocks);
-bin_indices = unique(bin_indices);
-
-N_bin_indices = diff(bin_indices);
-
-%bin_window = mean(N_bin_indices)*DT;
-
-if N_bin_indices(end)<mean(N_bin_indices(1:end-1)*0.5)
-    N_bin_indices(end) = [];
-    bin_indices(end) = [];
-    warning('Removed last bin with less than 50% of frames!!')
-end
-
-N_bins = length(bin_indices)-1;
-
-N_max_bad_frames = floor(N_bin_indices*0.25);
-
-label = nan(1,N_labels);
-
-if not(size(class_labels,1)==N_labels)
-    error('Number of stimulus blocks does not match!')
-end
-
-k=0;
-kk=0;
-for i=1:N_labels
-    for j=1:size(class_labels,1)
-        if strcmp(class_labels{j,1},dataOut.blockLabels{i})
-            k=k+1;
-            if class_labels{j,2}>0
-                kk=kk+1;
-                label(i) = kk;
-                label_str{i} = dataOut.blockLabels{i};
-            else
-                label(i) = 0;
-            end
-        end
-    end
-end
-if k<N_labels
-    error('not all labels were present in dataOut!');
-end
-valid = label>0;
-label_ind = find(valid);
-label_str = dataOut.blockLabels(label_ind);
-
-N_labels = length(label_ind);
-
-if ~isempty(THRESHOLD)
-    if THRESHOLD==1
-        CELLS = dataOut.stats.global.responsive_cells_p001_fdr_average(:)';
-    else
-        CELLS = THRESHOLD(:)';
-    end
-else
-    CELLS = 1:dataOut.totalNumCells;
-end
-N_cells = length(CELLS);
-
-DATA = zeros(N_cells,N_labels,N_bins,dataOut.totalNumTrials);
-DATA_isbad = DATA;
-
-k=0;
-for trial = 1:length(dataOut.trial)
-   for repeat = 1:dataOut.trial(trial).stimuliRepeats
-       k=k+1;
-       k1=0;
-       for stim = label_ind
-            k1=k1+1;
-            vec = find((dataOut.trial(trial).stimulus_vector==stim).*(dataOut.trial(trial).repetition_vector==repeat));
-            signal = dataOut.trial(trial).signal_deconv(CELLS,vec);            
-            isbad = ~dataOut.trial(trial).isValidFrame(vec);
-            for bin = 1:N_bins   
-                binind = bin_indices(bin):(bin_indices(bin+1)-1);
-                DATA(:,k1,bin,k) = mean(signal(:,binind),2);
-                if sum(isbad(binind))>N_max_bad_frames(bin)                  
-                    DATA_isbad(:,k1,bin,k) = 1;
-                end
-            end
-       end
-   end
-end
-
-bad_cells = [];
-for c=1:size(DATA,1)
-    for stim=1:size(DATA,2)        
-        sig = squeeze(DATA(c,stim,:,:));        
-        if sum(sum(sig>1e-6)>0)<size(DATA,4)*0.15
-            bad_cells(end+1)=c;
-            break;
-        end        
-    end
-end
-bad_cells = unique(bad_cells);
-
-DATA(bad_cells,:,:,:)=[];
-CELLS(bad_cells)=[];
-
-if length(bad_cells)>0
-   fprintf('\n\n!!!!! dropping %i cells not responding enough !!!\n\n',length(bad_cells)); 
-end
-
-grid1 = exp(-6:.05:-0.5);
-grid2 = exp(-6:.05:-0.5);
+grid1 = exp(-6:.05:-0.3);
+grid2 = exp(-6:.05:-0.3);
     
 ss = size(DATA);
 

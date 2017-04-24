@@ -116,7 +116,7 @@ R = sigma\C/sigma;
 
 C = (C+C')/2;
 
-extras.CondEst = condest(C);
+extras.Cond = cond(C);
 
 if ~strcmp(reg,'sample')
     % transfer the change in variance from R to V
@@ -126,8 +126,8 @@ end
 
 if PRINT_STATS
     if ~strcmp(reg,'sample')
-        fprintf('corr2(R_sample,R_reg) = %f, condest(C_reg) = %f, type ''%s''\n\n',corr2(squareform(nodiag(R_sample))',squareform(nodiag(R))'),extras.CondEst,reg);
+        fprintf('corr2(R_sample,R_reg) = %f, condest(C_reg) = %f, type ''%s''\n\n',corr2(squareform(nodiag(R_sample))',squareform(nodiag(R))'),extras.Cond,reg);
     else
-        fprintf('condest(C_sample) = %f, type ''%s''\n\n',extras.CondEst,reg);
+        fprintf('condest(C_sample) = %f, type ''%s''\n\n',extras.Cond,reg);
     end
 end

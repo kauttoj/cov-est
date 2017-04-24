@@ -21,7 +21,6 @@ test_params{3} = {10,200,3:4};
 test_params{4} = {10,200,1:4};
 
 test_methods = {'sample','diag','lv-glasso'};
-test_methods{1}=test_methods{3};
 
 test_results = [];
 
@@ -30,8 +29,7 @@ test_results = [];
 %alpha = 0.002; hyper1
 %beta = 0.05; hyper2        
 
-%GRID = {logspace(-3.2,-0.1,20),logspace(-3.2,-0.1,20)};
-GRID = {logspace(-3.2,-0.1,12),logspace(-3.2,-0.1,12)};
+GRID = {logspace(-3.2,-0.1,20),logspace(-3.2,-0.1,20)};
 
 all_seeds = randi(100000,1,100);
 
