@@ -2,6 +2,8 @@
 function [DATA,CELLS,label_str] = klab_get_data(dataOut,class_labels,THRESHOLD,BINNING)
 % Berkson's paradox
 
+REMOVE_FILE_MEAN = 1;
+
 warning('on','all');
 
 rng(666);
@@ -111,14 +113,16 @@ for trial = 1:length(dataOut.trial)
    end
 end
 
-file_mean = nan(1,length(dataOut.trial));
-for trial = 1:length(dataOut.trial)
-    ind = SESSION==trial;
-    file_mean(trial) = mean(vectorize(DATA(ind)));
-    DATA(ind) = DATA(ind)-file_mean(trial);
+if REMOVE_FILE_MEAN
+    file_mean = nan(1,length(dataOut.trial));
+    for trial = 1:length(dataOut.trial)
+        ind = SESSION==trial;
+        file_mean(trial) = mean(vectorize(DATA(ind)));
+        DATA(ind) = DATA(ind)-file_mean(trial);
+    end
+    
+    fprintf('file-wise means: %s\n',num2str(file_mean,'%0.3f, '));
 end
-
-fprintf('file-wise means: %s\n',num2str(file_mean,'%0.3f, '));
 
 bad_cells = [];
 for c=1:size(DATA,1)

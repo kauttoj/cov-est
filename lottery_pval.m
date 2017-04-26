@@ -9,6 +9,11 @@ function pval = lottery_pval(vec1,vec2)
     
     vec1 = vec1~=0;
     vec2 = vec2~=0;
+    
+    if sum(vec1) ==0 || sum(vec2)==0
+       error('empty vectors!') ;
+    end
+    
     N = length(vec1);
     NN = sum(vec1);
         
@@ -22,5 +27,7 @@ function pval = lottery_pval(vec1,vec2)
     end
     
     pval = nnz(null>=n)/length(null);
+    
+    fprintf('pval = %f (p=0.01 threshold is %i)\n',pval,ceil(prctile(null,99)));
 
 end

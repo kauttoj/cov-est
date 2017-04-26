@@ -26,10 +26,18 @@ end
 Z = bsxfun(@rdivide, XTest, sqrt(V));
 
 % covariance of z-score, i.e. the correlation estimate
-Rp = cove.cov(reshape(Z,[],p));
+Rp = cove.cov(reshape(Z,[],p)); % sample correlation
+
+% R  = estimated correlation
+% Rp = sample correlation (=target)
 
 % normal loss
-L = (trace(Rp/R)+cove.logDet(R))/p + sum(log(V(:)).*N(:));
+L = cove.logDet(R)/p + trace(Rp/R)/p + sum(log(V(:)).*N(:));
+
+% smallest possible
+% 1 + 0/p + sum(log(V(:)).*N(:));
+
+% gLasso: Banerjee and colleagues (2008) and Friedman and colleagues (2008)
 
 corrval = [];
 overlap = [];
@@ -38,7 +46,7 @@ if nargin>5
     % correlation between test and train correlation matrices
     try
         corrval = corr(squareform(nodiag(Rp))',squareform(nodiag(R))');        
-        overlap = edgeoverlap(R,Rp,5);        
+        overlap = edgeoverlap(R,Rp,5);
         %     sigma = diag(sqrt(mean(reshape(V,[],p))));  % average variances
         %     C = (sigma*Rp*sigma);
         %     C = cove.estimate_simple(C,reg, hypers); % get model-based covariance
@@ -50,4 +58,6 @@ end
 
 if isnan(L)
     L = inf;
+end
+
 end

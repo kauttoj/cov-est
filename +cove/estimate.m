@@ -85,7 +85,7 @@ switch reg
         C = L*L' + diag(psi);
         
     case 'glasso'
-        assert(length(hypers)==1)
+        assert(length(hypers)>0)
         cove.set('max_latent',0)   % prevent latent variables
         scale = mean(diag(C));
         extras = cove.lvglasso(C/scale,hypers(1),10,cove.set);
@@ -93,8 +93,12 @@ switch reg
         C = inv(extras.S);
         
     case 'L1'        
-        assert(length(hypers)==1)
+        assert(length(hypers)>0)
         C = L1precisionBCD(C/mean(diag(C)),hypers(1));
+        
+    case 'QUIC'
+        assert(length(hypers)>0)
+        [~,C] = QUIC('default',C,hypers(1),1e-6,0,200);
         
     case 'lv-glasso'
         assert(length(hypers)==2)
