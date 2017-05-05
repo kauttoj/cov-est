@@ -1,8 +1,6 @@
 
-function [DATA,CELLS,label_str] = klab_get_data(dataOut,class_labels,THRESHOLD,BINNING)
+function result = klab_get_data(dataOut,class_labels,THRESHOLD,BINNING)
 % Berkson's paradox
-
-REMOVE_FILE_MEAN = 1;
 
 warning('on','all');
 
@@ -40,27 +38,24 @@ end
 
 N_bins = length(bin_indices)-1;
 
-N_max_bad_frames = floor(N_bin_indices*0.25);
+N_max_bad_frames = floor(sum(N_bin_indices)*0.25);
+
+result.N_max_bad_frames = N_max_bad_frames;
+result.N_bin_indices=N_bin_indices;
 
 label = nan(1,N_labels);
 
-if not(size(class_labels,1)==N_labels)
+if not(length(class_labels)==N_labels)
     error('Number of stimulus blocks does not match!')
 end
 
 k=0;
-kk=0;
 for i=1:N_labels
-    for j=1:size(class_labels,1)
-        if strcmp(class_labels{j,1},dataOut.blockLabels{i})
+    for j=1:length(class_labels)
+        if strcmp(class_labels{j},dataOut.blockLabels{i})
             k=k+1;
-            if class_labels{j,2}>0
-                kk=kk+1;
-                label(i) = kk;
-                label_str{i} = dataOut.blockLabels{i};
-            else
-                label(i) = 0;
-            end
+            label(i) = k;
+            label_str{i} = dataOut.blockLabels{i};
         end
     end
 end
@@ -69,9 +64,7 @@ if k<N_labels
 end
 valid = label>0;
 label_ind = find(valid);
-label_str = dataOut.blockLabels(label_ind);
-
-N_labels = length(label_ind);
+result.labels = dataOut.blockLabels(label_ind);
 
 if ~isempty(THRESHOLD)
     if THRESHOLD==1
@@ -84,68 +77,92 @@ else
 end
 N_cells = length(CELLS);
 
-DATA = zeros(N_cells,N_labels,N_bins,dataOut.totalNumTrials);
-DATA_isbad = DATA;
+result.CELL_IDs = CELLS;
 
-SESSION = zeros(N_cells,N_labels,N_bins,dataOut.totalNumTrials);
+DATA = nan(N_cells,length(dataOut.trial),length(label_ind),dataOut.trial(1).stimuliRepeats,N_bins);
+DATA_isbad = zeros(size(DATA));
+DATA_neuropil = DATA;
+DATA_baseline = DATA;
 
-k=0;
-for trial = 1:length(dataOut.trial)           
-   for repeat = 1:dataOut.trial(trial).stimuliRepeats
-       k=k+1;
-       k1=0;
-       for stim = label_ind
-            k1=k1+1;
-            vec = find((dataOut.trial(trial).stimulus_vector==stim).*(dataOut.trial(trial).repetition_vector==repeat));
-            signal = dataOut.trial(trial).signal_deconv(CELLS,vec);            
-            isbad = ~dataOut.trial(trial).isValidFrame(vec);
+for file = 1:length(dataOut.trial)           
+    for stim = 1:length(label_ind)
+        for repeat = 1:dataOut.trial(file).stimuliRepeats       
+            vec = find((dataOut.trial(file).stimulus_vector==label_ind(stim)).*(dataOut.trial(file).repetition_vector==repeat));
+            signal = dataOut.trial(file).signal_deconv(CELLS,vec);            
+            
+            isbad = ~dataOut.trial(file).isValidFrame(vec);
             for bin = 1:N_bins   
                 binind = bin_indices(bin):(bin_indices(bin+1)-1);
-                DATA(:,k1,bin,k) = mean(signal(:,binind),2);
-                
-                SESSION(:,k1,bin,k) = trial;
-                
-                if sum(isbad(binind))>N_max_bad_frames(bin)                  
-                    DATA_isbad(:,k1,bin,k) = 1;
-                end
+                DATA(:,file,stim,repeat,bin) = mean(signal(:,binind),2);                
             end
+                        
+            vec1 = max(1,vec(1)-10):min(length(dataOut.trial(file).stimulus_vector),vec(end)+10);
+            assert(length(vec1)>length(vec));
+            signal_neuropil = dataOut.trial(file).signal_neuropil(CELLS,vec1);
+            m = median(signal_neuropil,2);
+            assert(all(m>0));
+            DATA_neuropil(:,file,stim,repeat,:) = repmat(m,[1,N_bins]);
+            
+            if sum(isbad)>N_max_bad_frames
+                DATA_isbad(:,file,stim,repeat,:) = 1;
+            end
+            
+            signal_baseline = dataOut.trial(file).signal_raw(CELLS,vec1);
+            m = arrayfun(@(i) median(signal_baseline(i,signal_baseline(i,:)<prctile(signal_baseline(i,:),50))),1:size(signal_baseline,1))';
+            assert(all(m>0));
+            DATA_baseline(:,file,stim,repeat,:) = repmat(m,[1,N_bins]);
+            
+            if sum(isbad)>N_max_bad_frames
+                DATA_isbad(:,file,stim,repeat,:) = 1;
+            end            
        end
    end
 end
 
-if REMOVE_FILE_MEAN
-    file_mean = nan(1,length(dataOut.trial));
-    for trial = 1:length(dataOut.trial)
-        ind = SESSION==trial;
-        file_mean(trial) = mean(vectorize(DATA(ind)));
-        DATA(ind) = DATA(ind)-file_mean(trial);
-    end
-    
-    fprintf('file-wise means: %s\n',num2str(file_mean,'%0.3f, '));
-end
+assert(nnz(isnan(DATA))==0);
+
+result.DATA_dimensions = {'cell','file','stimulus','repeat','bin'};
+result.DATA_isbad = DATA_isbad;
+result.DATA_neuropil = DATA_neuropil;
+result.DATA_baseline = DATA_baseline;
+
+median_response = median(vectorize(DATA(DATA>0)));
+
+result.median_response = median_response;
+
+coeff = dataOut.trial(file).neuropil_coefficient(CELLS);
 
 bad_cells = [];
-for c=1:size(DATA,1)
-    for stim=1:size(DATA,2)        
-        sig = squeeze(DATA(c,stim,:,:));        
-        if sum(sum(sig>1e-6)>0)<size(DATA,4)*0.15
-            bad_cells(end+1)=c;
-            break;
-        end        
+for cell=1:size(DATA,1)
+    a = mean(DATA(cell,:,:,:,:),5);
+    a = vectorize(permute(a,[2,4,3,1]));
+    bad_ratio = sum(a<median_response/1000)/length(a);
+    if bad_ratio > 0.75 || coeff(cell)>1.2 || coeff(cell)<0.25
+        bad_cells(end+1) = cell;
     end
 end
 bad_cells = unique(bad_cells);
 
-DATA(bad_cells,:,:,:)=[];
+result.bad_cells = CELLS(bad_cells);
+
+result.CELL_IDs = CELLS;
+
+result.max_allowed_bad_ratio_limit = 0.75;
+
+DATA(bad_cells,:,:,:,:)=[];
 CELLS(bad_cells)=[];
 
+result.DATA = DATA;
+
+result.CELL_IDs = CELLS;
+
 if length(bad_cells)>0
-   fprintf('\n\n!!!!! dropping %i cells not responding enough !!!\n\n',length(bad_cells)); 
+   fprintf('\n\n!!!!! dropping %i bad cells (not responding or bad neuropil fit) !!!\n\n',length(bad_cells)); 
 end
 
 end
 
-function mat = flatten(mat)
+function mat = vectorize(mat)
     mat = mat(:);
 end
 
